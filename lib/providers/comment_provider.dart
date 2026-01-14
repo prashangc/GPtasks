@@ -18,13 +18,9 @@ class CommentProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
-  List<String> _likes = [];
   List<String> _comments = [];
-  List<String> get likes => _likes;
   List<String> get comments => _comments;
-  int get likeCount => _likes.length;
   int get commentCount => comments.length;
-  bool get isLiked => _likes.contains(currentUserUid);
 
   bool isInitial = false;
 
@@ -40,8 +36,6 @@ class CommentProvider extends ChangeNotifier {
       _isLoading = true;
       isInitial = true;
     }
-    // notifyListeners();
-
     try {
       final snapshot = await _firestore
           .collection(_collection)
@@ -51,29 +45,12 @@ class CommentProvider extends ChangeNotifier {
       if (snapshot.exists) {
         final data = snapshot.data()!;
         announcementModel = AnnouncementModel.fromMap(snapshot.id, data);
-        setInitialLikes(announcementModel.likes);
         setInitialComments(announcementModel.comments);
-
-        final comments = announcementModel.comments ?? {};
-
-        int totalReplies = 0;
-        if (comments.isNotEmpty) {
-          totalReplies = comments.values
-              .map((comment) => comment.replies.length)
-              .fold(0, (a, b) => a + b);
-        }
-        // _commentCount = comments.length + totalReplies;
-
-        print('Comments: ${comments.map((k, v) => MapEntry(k, v.toMap()))}');
-        print('Replies: $totalReplies');
-        // print('Total Comment Count: $_commentCount');
       } else {
-        // _commentCount = 0;
-        print('No announcement found.');
+        log('No announcement found.');
       }
     } catch (e) {
-      print('Error fetching post: $e');
-      // _commentCount = 0;
+      log('Error fetching post: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -253,12 +230,6 @@ class CommentProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Set like count
-  void setInitialLikes(List<String> likes) {
-    _likes = List.from(likes);
-    notifyListeners();
-  }
-
   // void likePost(String id, bool isLike) async {
   //   try {
   //     await _firestore.collection(_collection).doc(id).update({
@@ -274,20 +245,23 @@ class CommentProvider extends ChangeNotifier {
   //   }
   // }
 
-  void likePostWithFireStoreSyncInBG(String id) {
-    if (isLiked) {
-      _likes.remove(currentUserUid);
-    } else {
-      _likes.add(currentUserUid);
-    }
-    notifyListeners();
+  Stream<DocumentSnapshot<Map<String, dynamic>>> streamPost(String postId) {
+    return FirebaseFirestore.instance
+        .collection(_collection)
+        .doc(postId)
+        .snapshots();
+  }
 
+  void likePostWithFireStoreSyncInBG({
+    required String id,
+    required bool isLiked,
+  }) {
     _firestore.collection(_collection).doc(id).update({
-      'likes': isLiked
+      'likes': !isLiked
           ? FieldValue.arrayUnion([currentUserUid])
           : FieldValue.arrayRemove([currentUserUid])
     }).catchError((e) {
-      notifyListeners();
+      // notifyListeners();
       log("Like update failed: $e");
     });
   }
